@@ -2,12 +2,13 @@ My driver does not use the original source codes and is a completely reverse-eng
 
 Fixed vulnerabilities in opensource driver RTCore64.sys:
 - [x] CVE-2019-16098
-- [x] CVE-2024-1443
-- [x] CVE-2024-1443
+- [ ] CVE-2024-1443
+- [ ] CVE-2024-1460
+- [ ] CVE-2024-3745
 
 Fixed not CVE vulns and bugs:
-- IoDevice leaks
+- IoDevice leak
 
 Authors:
-- 2026 - Hermann Semenoff <germanaizek.github.io>
-- (Sep 30 2016 - Aug 27 2017) - Micro-Star International (MSI), RivaTuner Team <security@msi.com>
+- 2026 - Hermann Semenoff <<GermanAizek@yandex.ru>> ([germanaizek.github.io](germanaizek.github.io))
+- (Sep 30 2016 - Aug 27 2017) - Micro-Star International (MSI), RivaTuner Team <<security@msi.com>>
