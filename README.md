@@ -1,14 +1,32 @@
-My driver does not use the original source codes and is a completely reverse-engineered restored driver. The main goal of the project is to recreate a secure driver with fixed vulnerabilities and errors made by past developers.
+# RTCore64
+
+RTCore64 - kernel mode driver, which is included in popular GPU monitoring and overclocking software such as MSI Afterburner, RivaTuner Statistics Server (RTSS), and EVGA Precision X.
+
+My driver does not use the original source codes and is a reverse-engineered driver using [Ghidra](https://en.wikipedia.org/wiki/Ghidra). The rights have not been violated, and the new driver cannot be signed due to the EV certificate. I hope that the vulnerabilities can be closed using my security patches.
+
+The main goal of the project is to recreate a secure driver with fixed vulnerabilities and errors made by past developers.
+
+### Functions
+
+Driver RTCore64.sys allows the specified software to interact with the hardware (GPU, temperature sensors, voltage) directly at a low level.
+
+- Control of the rotation speed GPU fans
+- Changing the core and memory frequencies (overclocking)
+- Voltage change (voltmode)
+- Displays metrics (FPS, temperature) on top of fullscreen games
 
 Fixed vulnerabilities in opensource driver RTCore64.sys:
+
 - [x] CVE-2019-16098
-- [ ] CVE-2024-1443
-- [ ] CVE-2024-1460
+- [x] CVE-2024-1443
+- [x] CVE-2024-1460
 - [ ] CVE-2024-3745
 
 Fixed not CVE vulns and bugs:
-- IoDevice leak
+
+- IoDevice leak ([view code](https://github.com/GermanAizek/RTCore64/blob/d1cce3220d5ff89d40495dd2ae03ae8361e4a8b8/main.c#L352-L353))
 
 Authors:
-- 2026 - Hermann Semenoff <<GermanAizek@yandex.ru>> ([germanaizek.github.io](germanaizek.github.io))
+
+- 2026 - Herman Semenoff <<GermanAizek@yandex.ru>> ([germanaizek.github.io](https://germanaizek.github.io))
 - (Sep 30 2016 - Aug 27 2017) - Micro-Star International (MSI), RivaTuner Team <<security@msi.com>>
