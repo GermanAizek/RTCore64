@@ -1,5 +1,5 @@
 #include <ntddk.h>
-#include <intrin.h>
+#include <wdmsec.h>
 #include "rtcore.h"
 
 typedef struct _RTC_SECTION_MAPPING RTC_SECTION_MAPPING, *PRTC_SECTION_MAPPING;
@@ -15,6 +15,11 @@ ULONG g_RtcCounter = 0;
 DRIVER_INITIALIZE DriverEntry;
 DRIVER_UNLOAD RtcUnload;
 DRIVER_DISPATCH RtcDispatch;
+
+// уник GUID для класса устройства (необходим для IoCreateDeviceSecure)
+// {B4C8116E-7F8D-433A-8C37-A350EF4F17A2}
+static const GUID GUID_DEVCLASS_RTCORE = 
+{ 0xb4c8116e, 0x7f8d, 0x433a, { 0x8c, 0x37, 0xa3, 0x50, 0xef, 0x4f, 0x17, 0xa2 } };
 
 // Функция: RtcUnload (GHIDRA: FUN_00011000)
 VOID RtcUnload(_In_ PDRIVER_OBJECT DriverObject)
@@ -273,16 +278,26 @@ NTSTATUS DriverEntry(_In_ PDRIVER_OBJECT DriverObject, _In_ PUNICODE_STRING Regi
     UNICODE_STRING deviceName;
     UNICODE_STRING symbolicLinkName;
 
+    // SDDL Строка защиты:
+    // D:P         -> Защищенный DACL (DACL Protected)
+    // (A;;GA;;;SY)-> Разрешить (A) полный доступ (GA) локальной Системе (SY)
+    // (A;;GA;;;BA)-> Разрешить (A) полный доступ (GA) Встроенным Администраторам (BA)
+    
+    // Любые другие пользователи (включая обычных пользователей и гостей) не смогут получить Handle
+    DECLARE_CONST_UNICODE_STRING(sddlSecureString, L"D:P(A;;GA;;;SY)(A;;GA;;;BA)");
+
     RtlInitUnicodeString(&deviceName, L"\\Device\\RTCore64");
     RtlInitUnicodeString(&symbolicLinkName, L"\\DosDevices\\RTCore64");
 
-    status = IoCreateDevice(
+    status = IoCreateDeviceSecure(
         DriverObject,
         0,
         &deviceName,
         FILE_DEVICE_UNKNOWN,
-        0,
+        FILE_DEVICE_SECURE_OPEN, // обязать требовать проверку безопасности при открытии дескрипторов
         FALSE,
+        &sddlSecureString,
+        &GUID_DEVCLASS_RTCORE,
         &deviceObject
     );
 
