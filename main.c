@@ -301,8 +301,8 @@ NTSTATUS DriverEntry(_In_ PDRIVER_OBJECT DriverObject, _In_ PUNICODE_STRING Regi
         }
         else 
         {
-       		// in original RTCore64.sys have IoDevice leak
-            //IoDeleteDevice(deviceObject);
+            // fixed IoDevice leak if create symbolic link failed (OpenRTCore64 feature)
+            IoDeleteDevice(deviceObject);
         }
     }
 
