@@ -17,10 +17,10 @@ Driver RTCore64.sys allows the specified software to interact with the hardware 
 
 Fixed vulnerabilities in opensource driver RTCore64.sys:
 
-- [x] CVE-2019-16098
-- [x] CVE-2024-1443
-- [x] CVE-2024-1460
-- [ ] CVE-2024-3745
+- [x] (CVE-2019-16098)[https://www.sophos.com/en-us/blog/blackbyte-ransomware-returns]
+- [x] (CVE-2024-1443)[https://fluidattacks.com/advisories/coltrane]
+- [x] (CVE-2024-1460)[https://fluidattacks.com/advisories/mingus]
+- [ ] (CVE-2024-3745)[https://fluidattacks.com/advisories/gershwin]
 
 Fixed not CVE vulns and bugs:
 
