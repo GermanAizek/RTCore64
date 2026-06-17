@@ -32,17 +32,16 @@ NTSTATUS RtcMapMemoryViaSection(
     SIZE_T viewSize;
     ULONG_PTR pageOffset;
 
+    if (MappingRequest == NULL || RequiredLength < 0x20 || RequiredAlignment < 8) {
+        return STATUS_INSUFFICIENT_RESOURCES;
+    }
     if (!RtcValidatePhysicalAddress(
             MappingRequest->PhysicalAddress, 
             MappingRequest->Length, 
             &MappingRequest->PciContext, 
-            (ULONG_PTR)RequiredAlignment)) // Каст к ULONG_PTR
+            (ULONG_PTR)RequiredAlignment)) 
     {
         return STATUS_UNSUCCESSFUL;
-    }
-
-    if (RequiredLength < 0x20 || RequiredAlignment < 8) {
-        return STATUS_INSUFFICIENT_RESOURCES;
     }
 
     RtlInitUnicodeString(&physicalMemoryString, L"\\Device\\PhysicalMemory");
@@ -86,7 +85,7 @@ NTSTATUS RtcMapMemoryViaSection(
         0, 0, 
         &sectionOffset, 
         &viewSize, 
-        ViewShare, // Используем ViewShare (значение 1, как в Ghidra)
+        ViewShare, 
         0, 
         PAGE_READWRITE | PAGE_NOCACHE
     );

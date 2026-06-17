@@ -66,6 +66,12 @@ NTSTATUS RtcDispatch(_In_ PDEVICE_OBJECT DeviceObject, _Inout_ PIRP Irp)
     switch (irpSp->Parameters.DeviceIoControl.IoControlCode)
     {
         case 0x80002000: // маппинг памяти через секцию PhysicalMemory
+            // Предварительная проверка длины входящего буфера и наличия самого буфера
+            if (inputBufferLength < 0x20 || systemBuffer == NULL) {
+                status = STATUS_INVALID_PARAMETER;
+                break;
+            }
+            
             status = RtcMapMemoryViaSection((PRTC_SECTION_MAPPING)systemBuffer, inputBufferLength, outputBufferLength);
             if (NT_SUCCESS(status)) {
                 information = 8;
