@@ -1,5 +1,70 @@
 #include "rtcore.h"
 
+#define RTC_MAX_MAPPINGS 256
+#define RTC_HANDLE_BASE ((PVOID)0x10000000)
+
+typedef struct _RTC_MAPPING_ENTRY {
+    BOOLEAN InUse;
+    PVOID KernelAddress;
+    ULONG Length;
+} RTC_MAPPING_ENTRY;
+
+RTC_MAPPING_ENTRY g_Mappings[RTC_MAX_MAPPINGS];
+KSPIN_LOCK g_MappingLock;
+
+void RtcInitMappingTable(void) {
+    KeInitializeSpinLock(&g_MappingLock);
+    RtlZeroMemory(g_Mappings, sizeof(g_Mappings));
+}
+
+PVOID RtcAddMapping(PVOID KernelAddress, ULONG Length) {
+    KIRQL irql;
+    PVOID handle = NULL;
+    KeAcquireSpinLock(&g_MappingLock, &irql);
+    for (ULONG i = 0; i < RTC_MAX_MAPPINGS; i++) {
+        if (!g_Mappings[i].InUse) {
+            g_Mappings[i].KernelAddress = KernelAddress;
+            g_Mappings[i].Length = Length;
+            g_Mappings[i].InUse = TRUE;
+            handle = (PVOID)((ULONG_PTR)RTC_HANDLE_BASE + i);
+            break;
+        }
+    }
+    KeReleaseSpinLock(&g_MappingLock, irql);
+    return handle;
+}
+
+PVOID RtcGetMapping(PVOID Handle, ULONG* OutLength) {
+    ULONG_PTR index = (ULONG_PTR)Handle - (ULONG_PTR)RTC_HANDLE_BASE;
+    if (index >= RTC_MAX_MAPPINGS) return NULL;
+
+    KIRQL irql;
+    PVOID kernelAddress = NULL;
+    KeAcquireSpinLock(&g_MappingLock, &irql);
+    if (g_Mappings[index].InUse) {
+        kernelAddress = g_Mappings[index].KernelAddress;
+        if (OutLength) *OutLength = g_Mappings[index].Length;
+    }
+    KeReleaseSpinLock(&g_MappingLock, irql);
+    return kernelAddress;
+}
+
+BOOLEAN RtcRemoveMapping(PVOID Handle, ULONG Length) {
+    ULONG_PTR index = (ULONG_PTR)Handle - (ULONG_PTR)RTC_HANDLE_BASE;
+    if (index >= RTC_MAX_MAPPINGS) return FALSE;
+
+    KIRQL irql;
+    BOOLEAN result = FALSE;
+    KeAcquireSpinLock(&g_MappingLock, &irql);
+    if (g_Mappings[index].InUse && g_Mappings[index].Length == Length) {
+        MmUnmapIoSpace(g_Mappings[index].KernelAddress, g_Mappings[index].Length);
+        g_Mappings[index].InUse = FALSE;
+        result = TRUE;
+    }
+    KeReleaseSpinLock(&g_MappingLock, irql);
+    return result;
+}
+
 // структура запроса на маппинг памяти
 typedef struct _RTC_MEMORY_MAPPING {
     PHYSICAL_ADDRESS PhysicalAddress; // +0x00: Целевой физический адрес
@@ -86,8 +151,14 @@ NTSTATUS RtcMapMemory(_In_ PRTC_MEMORY_MAPPING MappingRequest)
     {
         mappedAddress = MmMapIoSpace(translatedAddress, MappingRequest->Length, MmNonCached);
         if (mappedAddress != NULL) {
-            MappingRequest->MappedAddress = mappedAddress;
-            return STATUS_SUCCESS;
+            PVOID handle = RtcAddMapping(mappedAddress, MappingRequest->Length);
+            if (handle != NULL) {
+                MappingRequest->MappedAddress = handle;
+                return STATUS_SUCCESS;
+            } else {
+                MmUnmapIoSpace(mappedAddress, MappingRequest->Length);
+                return STATUS_INSUFFICIENT_RESOURCES;
+            }
         }
     }
     return STATUS_INSUFFICIENT_RESOURCES;

@@ -16,3 +16,8 @@ BOOLEAN RtcValidatePhysicalAddress(
     _In_ PRTC_PCI_BAR_CONTEXT PciContext,
     _In_ ULONG_PTR UnknownArg // ULONG_PTR для совместимости с mmapsection и mmapio
 );
+
+void RtcInitMappingTable(void);
+PVOID RtcAddMapping(PVOID KernelAddress, ULONG Length);
+PVOID RtcGetMapping(PVOID Handle, ULONG* OutLength);
+BOOLEAN RtcRemoveMapping(PVOID Handle, ULONG Length);

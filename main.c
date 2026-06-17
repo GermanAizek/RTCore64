@@ -8,6 +8,9 @@ typedef struct _RTC_MEMORY_MAPPING RTC_MEMORY_MAPPING, *PRTC_MEMORY_MAPPING;
 extern NTSTATUS RtcMapMemoryViaSection(PRTC_SECTION_MAPPING MappingRequest, ULONG RequiredLength, ULONG RequiredAlignment);
 extern NTSTATUS RtcMapMemory(PRTC_MEMORY_MAPPING MappingRequest);
 extern BOOLEAN RtcValidatePciDataPortAccess(ULONG Port);
+extern void RtcInitMappingTable(void);
+extern PVOID RtcGetMapping(PVOID Handle, ULONG* OutLength);
+extern BOOLEAN RtcRemoveMapping(PVOID Handle, ULONG Length);
 
 // IOCTL 0x8000202C (GHIDRA: DAT_00013054)
 ULONG g_RtcCounter = 0;
@@ -183,50 +186,72 @@ NTSTATUS RtcDispatch(_In_ PDEVICE_OBJECT DeviceObject, _Inout_ PIRP Irp)
             } else status = STATUS_INVALID_PARAMETER;
             break;
 
-        case 0x80002044: // анмап физической памяти (MmUnmapIoSpace)
+        case 0x80002044: // анмап физической памяти (через Handle)
             if (inputBufferLength == 0x30) {
-                PVOID mappedAddress = (PVOID)(*(PULONG64)(&buffer32[2]));
+                PVOID handle = (PVOID)(*(PULONG64)(&buffer32[2]));
                 ULONG length = buffer32[4];
-                if (mappedAddress == NULL) {
+                if (handle == NULL) {
                     status = STATUS_INVALID_PARAMETER;
                 } else {
-                    MmUnmapIoSpace(mappedAddress, length);
+                    if (!RtcRemoveMapping(handle, length)) {
+                        status = STATUS_INVALID_PARAMETER;
+                    }
                 }
             } else status = STATUS_INVALID_PARAMETER;
             break;
 
-        case 0x80002048: // чтение из замапленной памяти
+        case 0x80002048: // чтение из замапленной памяти (через Handle)
             if (inputBufferLength == 0x30) {
-                ULONG64 address = *(PULONG64)(&buffer32[2]);
-                if (address == 0) {
+                PVOID handle = (PVOID)(*(PULONG64)(&buffer32[2]));
+                ULONG mapLength = 0;
+                PVOID mappedAddress = RtcGetMapping(handle, &mapLength);
+
+                if (mappedAddress == NULL) {
                     status = STATUS_INVALID_PARAMETER;
                 } else {
                     ULONG accessSize = buffer32[6];
-                    ULONG_PTR targetAddress = (ULONG_PTR)buffer32[5] + address;
+                    ULONG offset = buffer32[5]; // buffer32[5] теперь выступает как смещение внутри блока
                     
-                    if (accessSize == 1) buffer32[7] = *(PUCHAR)targetAddress;
-                    else if (accessSize == 2) buffer32[7] = *(PUSHORT)targetAddress;
-                    else if (accessSize == 4) buffer32[7] = *(PULONG)targetAddress;
-                    
-                    information = 0x30;
+                    // FIX: cтрого проверяем выход за границы выделенного участка
+                    if (offset + accessSize > mapLength || offset + accessSize < offset) {
+                        status = STATUS_ACCESS_VIOLATION;
+                    } else {
+                        ULONG_PTR targetAddress = (ULONG_PTR)mappedAddress + offset;
+                        
+                        if (accessSize == 1) buffer32[7] = *(PUCHAR)targetAddress;
+                        else if (accessSize == 2) buffer32[7] = *(PUSHORT)targetAddress;
+                        else if (accessSize == 4) buffer32[7] = *(PULONG)targetAddress;
+                        
+                        information = 0x30;
+                    }
                 }
             } else status = STATUS_INVALID_PARAMETER;
             break;
 
-        case 0x8000204C: // запись в замапленную память
+        case 0x8000204C: // запись в замапленную память (через Handle)
             if (inputBufferLength == 0x30) {
-                PVOID mappedAddress = *(PVOID*)(&buffer32[2]);
+                PVOID handle = (PVOID)(*(PULONG64)(&buffer32[2]));
+                ULONG mapLength = 0;
+                PVOID mappedAddress = RtcGetMapping(handle, &mapLength);
+
                 if (mappedAddress == NULL) {
-                    status = STATUS_INSUFFICIENT_RESOURCES;
+                    status = STATUS_INVALID_PARAMETER;
                 } else {
                     ULONG accessSize = buffer32[6];
-                    ULONG_PTR targetAddress = (ULONG_PTR)buffer32[5] + (ULONG_PTR)mappedAddress;
+                    ULONG offset = buffer32[5];
                     
-                    if (accessSize == 1) *(PUCHAR)targetAddress = (UCHAR)buffer32[7];
-                    else if (accessSize == 2) *(PUSHORT)targetAddress = (USHORT)buffer32[7];
-                    else if (accessSize == 4) *(PULONG)targetAddress = buffer32[7];
-                    
-                    information = 0x30;
+                    // FIX: cтрого проверяем выход за границы выделенного участка
+                    if (offset + accessSize > mapLength || offset + accessSize < offset) {
+                        status = STATUS_ACCESS_VIOLATION;
+                    } else {
+                        ULONG_PTR targetAddress = (ULONG_PTR)mappedAddress + offset;
+                        
+                        if (accessSize == 1) *(PUCHAR)targetAddress = (UCHAR)buffer32[7];
+                        else if (accessSize == 2) *(PUSHORT)targetAddress = (USHORT)buffer32[7];
+                        else if (accessSize == 4) *(PULONG)targetAddress = buffer32[7];
+                        
+                        information = 0x30;
+                    }
                 }
             } else status = STATUS_INVALID_PARAMETER;
             break;
@@ -283,6 +308,8 @@ NTSTATUS DriverEntry(_In_ PDRIVER_OBJECT DriverObject, _In_ PUNICODE_STRING Regi
     PDEVICE_OBJECT deviceObject = NULL;
     UNICODE_STRING deviceName;
     UNICODE_STRING symbolicLinkName;
+    
+    RtcInitMappingTable();
 
     // SDDL Строка защиты:
     // D:P         -> Защищенный DACL (DACL Protected)
