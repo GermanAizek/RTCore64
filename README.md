@@ -22,7 +22,7 @@ Fixed vulnerabilities in opensource driver RTCore64.sys:
 - [x] (CVE-2024-1460)[https://fluidattacks.com/advisories/mingus]
 - [ ] (CVE-2024-3745)[https://fluidattacks.com/advisories/gershwin]
 
-Fixed not CVE vulns and bugs:
+Fixed no publish vulnerabilities and bugs which OpenRTCore64 contributors to this project found:
 
 - IoDevice leak ([view code](https://github.com/GermanAizek/RTCore64/blob/d1cce3220d5ff89d40495dd2ae03ae8361e4a8b8/main.c#L352-L353))
 
