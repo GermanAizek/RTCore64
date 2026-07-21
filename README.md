@@ -24,6 +24,7 @@ Fixed vulnerabilities in opensource driver RTCore64.sys:
 
 Fixed no publish vulnerabilities and bugs which OpenRTCore64 contributors to this project found:
 
+- Local Privilege Escalation using w/r to MSR regs
 - IoDevice leak ([view code](https://github.com/GermanAizek/RTCore64/blob/d1cce3220d5ff89d40495dd2ae03ae8361e4a8b8/main.c#L352-L353))
 
 Authors:

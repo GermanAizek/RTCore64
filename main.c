@@ -37,6 +37,29 @@ VOID RtcUnload(_In_ PDRIVER_OBJECT DriverObject)
     }
 }
 
+// Функция для проверки безопасности MSR регистра
+BOOLEAN RtcIsSafeMsr(ULONG MsrRegister)
+{
+    // Белый список разрешенных регистров для мониторинга и разгона
+    switch (MsrRegister)
+    {
+    case 0x00000198: // MSR_PERF_STATUS (Текущая частота и напряжение)
+    case 0x00000199: // MSR_PERF_CTL (Управление частотой/напряжением)
+    case 0x0000019C: // IA32_THERM_STATUS (Статус температуры)
+    case 0x000001A2: // MSR_TEMPERATURE_TARGET (TjMax)
+    case 0x000001B1: // IA32_PACKAGE_THERM_STATUS (Температура процессора в целом)
+    case 0x00000610: // MSR_PKG_POWER_LIMIT (Лимиты энергопотребления)
+    case 0x00000611: // MSR_PKG_ENERGY_STATUS (Потребленная энергия)
+    case 0xC0010015: // HWCR (AMD Hardware Configuration Register - часто нужен для мониторинга)
+        // в OpenRTCore64 драйвере можно расширить получаемые данные через MSR регистры
+        return TRUE;
+
+    default:
+        // Блокируем доступ ко всем остальным (включая опасную 0xC0000082 IA32_LSTAR для исправления Local Priviliage Escalation)
+        return FALSE;
+    }
+}
+
 // RtcDispatch (GHIDRA: FUN_00011450)
 NTSTATUS RtcDispatch(_In_ PDEVICE_OBJECT DeviceObject, _Inout_ PIRP Irp)
 {
@@ -173,18 +196,28 @@ NTSTATUS RtcDispatch(_In_ PDEVICE_OBJECT DeviceObject, _Inout_ PIRP Irp)
 
         case 0x80002030: // чтение регистра MSR
             if (inputBufferLength == 12) {
-                ULONG64 msrValue = __readmsr(buffer32[0]);
-                buffer32[1] = (ULONG)(msrValue >> 32);     // High
-                buffer32[2] = (ULONG)(msrValue & 0xFFFFFFFF); // Low
-                information = 12;
+                // чекаем разрешен ли этот MSR
+                if (RtcIsSafeMsr(buffer32[0])) {
+                    ULONG64 msrValue = __readmsr(buffer32[0]);
+                    buffer32[1] = (ULONG)(msrValue >> 32);     // High
+                    buffer32[2] = (ULONG)(msrValue & 0xFFFFFFFF); // Low
+                    information = 12;
+                } else {
+                    status = STATUS_ACCESS_DENIED;
+                }
             } else status = STATUS_INVALID_PARAMETER;
             break;
 
         case 0x80002034: // запись в регистр MSR
             if (inputBufferLength == 12) {
-                ULONG64 msrValue = ((ULONG64)buffer32[1] << 32) | buffer32[2];
-                __writemsr(buffer32[0], msrValue);
-                information = 12;
+                // Чекаем разрешен ли этот MSR
+                if (RtcIsSafeMsr(buffer32[0])) {
+                    ULONG64 msrValue = ((ULONG64)buffer32[1] << 32) | buffer32[2];
+                    __writemsr(buffer32[0], msrValue);
+                    information = 12;
+                } else {
+                    status = STATUS_ACCESS_DENIED;
+                }
             } else status = STATUS_INVALID_PARAMETER;
             break;
 
