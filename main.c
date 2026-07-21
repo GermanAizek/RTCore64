@@ -51,9 +51,22 @@ NTSTATUS RtcDispatch(_In_ PDEVICE_OBJECT DeviceObject, _Inout_ PIRP Irp)
     UNREFERENCED_PARAMETER(DeviceObject);
 
     irpSp = IoGetCurrentIrpStackLocation(Irp);
+
+    // FIX CVE-2024-3745: Строгая проверка пространства имен (Namespace ACL Bypass).
+    // Если пользователь запрашивает путь с суффиксом (например, \Device\RTCore64\ или \Device\RTCore64\abc),
+    // мы жестко блокируем этот запрос на этапе IRP_MJ_CREATE.
+    if (irpSp->MajorFunction == IRP_MJ_CREATE) {
+        if (irpSp->FileObject != NULL && irpSp->FileObject->FileName.Length > 0) {
+            Irp->IoStatus.Status = STATUS_OBJECT_NAME_NOT_FOUND;
+            Irp->IoStatus.Information = 0;
+            IoCompleteRequest(Irp, IO_NO_INCREMENT);
+            return STATUS_OBJECT_NAME_NOT_FOUND;
+        }
+    }
+
     systemBuffer = Irp->AssociatedIrp.SystemBuffer;
     buffer32 = (PULONG)systemBuffer;
-    
+
     inputBufferLength = irpSp->Parameters.DeviceIoControl.InputBufferLength;
     outputBufferLength = irpSp->Parameters.DeviceIoControl.OutputBufferLength;
 
@@ -74,7 +87,7 @@ NTSTATUS RtcDispatch(_In_ PDEVICE_OBJECT DeviceObject, _Inout_ PIRP Irp)
                 status = STATUS_INVALID_PARAMETER;
                 break;
             }
-            
+
             status = RtcMapMemoryViaSection((PRTC_SECTION_MAPPING)systemBuffer, inputBufferLength, outputBufferLength);
             if (NT_SUCCESS(status)) {
                 information = 8;
@@ -211,17 +224,17 @@ NTSTATUS RtcDispatch(_In_ PDEVICE_OBJECT DeviceObject, _Inout_ PIRP Irp)
                 } else {
                     ULONG accessSize = buffer32[6];
                     ULONG offset = buffer32[5]; // buffer32[5] теперь выступает как смещение внутри блока
-                    
+
                     // FIX: cтрого проверяем выход за границы выделенного участка
                     if (offset + accessSize > mapLength || offset + accessSize < offset) {
                         status = STATUS_ACCESS_VIOLATION;
                     } else {
                         ULONG_PTR targetAddress = (ULONG_PTR)mappedAddress + offset;
-                        
+
                         if (accessSize == 1) buffer32[7] = *(PUCHAR)targetAddress;
                         else if (accessSize == 2) buffer32[7] = *(PUSHORT)targetAddress;
                         else if (accessSize == 4) buffer32[7] = *(PULONG)targetAddress;
-                        
+
                         information = 0x30;
                     }
                 }
@@ -239,17 +252,17 @@ NTSTATUS RtcDispatch(_In_ PDEVICE_OBJECT DeviceObject, _Inout_ PIRP Irp)
                 } else {
                     ULONG accessSize = buffer32[6];
                     ULONG offset = buffer32[5];
-                    
+
                     // FIX: cтрого проверяем выход за границы выделенного участка
                     if (offset + accessSize > mapLength || offset + accessSize < offset) {
                         status = STATUS_ACCESS_VIOLATION;
                     } else {
                         ULONG_PTR targetAddress = (ULONG_PTR)mappedAddress + offset;
-                        
+
                         if (accessSize == 1) *(PUCHAR)targetAddress = (UCHAR)buffer32[7];
                         else if (accessSize == 2) *(PUSHORT)targetAddress = (USHORT)buffer32[7];
                         else if (accessSize == 4) *(PULONG)targetAddress = buffer32[7];
-                        
+
                         information = 0x30;
                     }
                 }
@@ -295,7 +308,7 @@ NTSTATUS RtcDispatch(_In_ PDEVICE_OBJECT DeviceObject, _Inout_ PIRP Irp)
 
     Irp->IoStatus.Status = status;
     Irp->IoStatus.Information = information;
-    
+
     IoCompleteRequest(Irp, IO_NO_INCREMENT);
     return status;
 }
@@ -308,14 +321,14 @@ NTSTATUS DriverEntry(_In_ PDRIVER_OBJECT DriverObject, _In_ PUNICODE_STRING Regi
     PDEVICE_OBJECT deviceObject = NULL;
     UNICODE_STRING deviceName;
     UNICODE_STRING symbolicLinkName;
-    
+
     RtcInitMappingTable();
 
     // SDDL Строка защиты:
     // D:P         -> Защищенный DACL (DACL Protected)
     // (A;;GA;;;SY)-> Разрешить (A) полный доступ (GA) локальной Системе (SY)
     // (A;;GA;;;BA)-> Разрешить (A) полный доступ (GA) Встроенным Администраторам (BA)
-    
+
     // Любые другие пользователи (включая обычных пользователей и гостей) не смогут получить Handle
     DECLARE_CONST_UNICODE_STRING(sddlSecureString, L"D:P(A;;GA;;;SY)(A;;GA;;;BA)");
 
@@ -334,20 +347,20 @@ NTSTATUS DriverEntry(_In_ PDRIVER_OBJECT DriverObject, _In_ PUNICODE_STRING Regi
         &deviceObject
     );
 
-    if (NT_SUCCESS(status)) 
+    if (NT_SUCCESS(status))
     {
         status = IoCreateSymbolicLink(&symbolicLinkName, &deviceName);
-        
-        if (NT_SUCCESS(status)) 
+
+        if (NT_SUCCESS(status))
         {
             DriverObject->MajorFunction[IRP_MJ_CREATE]         = RtcDispatch;
             DriverObject->MajorFunction[IRP_MJ_CLOSE]          = RtcDispatch;
             DriverObject->MajorFunction[IRP_MJ_DEVICE_CONTROL] = RtcDispatch;
             DriverObject->DriverUnload                         = RtcUnload;
-            
+
             return STATUS_SUCCESS;
         }
-        else 
+        else
         {
             // fixed IoDevice leak if create symbolic link failed (OpenRTCore64 feature)
             IoDeleteDevice(deviceObject);

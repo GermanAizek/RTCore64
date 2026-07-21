@@ -20,7 +20,7 @@ Fixed vulnerabilities in opensource driver RTCore64.sys:
 - [x] (CVE-2019-16098)[https://www.sophos.com/en-us/blog/blackbyte-ransomware-returns]
 - [x] (CVE-2024-1443)[https://fluidattacks.com/advisories/coltrane]
 - [x] (CVE-2024-1460)[https://fluidattacks.com/advisories/mingus]
-- [ ] (CVE-2024-3745)[https://fluidattacks.com/advisories/gershwin]
+- [x] (CVE-2024-3745)[https://fluidattacks.com/advisories/gershwin]
 
 Fixed no publish vulnerabilities and bugs which OpenRTCore64 contributors to this project found:
 
