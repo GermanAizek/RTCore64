@@ -5,35 +5,47 @@
 #define PCI_ENABLE_BIT          0x80000000 // бит 31 (Enable Configuration Space Mapping)
 #define PCI_REGISTER_MASK       0xFC       // маска для битов 2-7 (смещение регистра)
 
-// fcn_00011420 Валидация доступа к порту конфигурации PCI данных (0xCFC)
-BOOLEAN RtcValidatePciDataPortAccess(_In_ ULONG Port)
+// Функция валидации доступа к любым портам ввода-вывода (I/O)
+BOOLEAN RtcValidateIOPortAccess(_In_ ULONG Port, _In_ BOOLEAN IsWrite)
 {
     ULONG configAddress;
     ULONG registerOffset;
 
-    // чекаем идет ли обращение именно к порту данных PCI (0xCFC)
-    if (Port == PCI_CONFIG_DATA_PORT) 
+    // разрешаем доступ к порту адреса конфигурации PCI (0xCF8)
+    if (Port == PCI_CONFIG_ADDRESS_PORT)
     {
-        // парсим текущее значение из порта адреса (0xCF8), чтобы узнать какой регистр PCI выбран в данный момент
-        // аналог ассемблер: (dx = 0xcf8; in eax, dx;)
-        configAddress = READ_PORT_ULONG((PULONG)(ULONG_PTR)PCI_CONFIG_ADDRESS_PORT);
-
-        // сверяем бит включения (31 бит). Если он не установлен, механизм конфигурации PCI неактивен
-        if ((configAddress & PCI_ENABLE_BIT) != 0) 
-        {
-            // извлекаем смещение регистра внутри конфигурационного пространства
-            // маска 0xFC (11111100b) отбрасывает лишние биты, оставляя только номер регистра
-            registerOffset = configAddress & PCI_REGISTER_MASK;
-
-            // разрешаем доступ только если смещение находится в диапазоне 0x10 - 0x27
-            // в стандарте PCI это пространство Base Address Registers (BAR0 - BAR5) и Cardbus CIS Pointer.
-            if (registerOffset >= 0x10 && registerOffset <= 0x27) 
-            {
-                return FALSE; // 0: условие соблюдено (доступ разрешен)
-            }
-        }
+        return TRUE;
     }
 
-    // 1: Порт не 0xCFC, бит Enable снят или регистр вне диапазона BAR (доступ запрещен)
-    return TRUE; 
+    // проверка при доступе к порту данных PCI (0xCFC)
+    if (Port == PCI_CONFIG_DATA_PORT)
+    {
+        // при записи дополнительно защищаем критически важные регистры BAR
+        if (IsWrite)
+        {
+            configAddress = READ_PORT_ULONG((PULONG)(ULONG_PTR)PCI_CONFIG_ADDRESS_PORT);
+            if ((configAddress & PCI_ENABLE_BIT) != 0)
+            {
+                registerOffset = configAddress & PCI_REGISTER_MASK;
+
+                // если попытка перезаписать Base Address Registers (BAR0 - BAR5) или CIS Pointer (0x10 - 0x27)
+                // блокаем эту операцию (защита от краша и эксплойтов)
+                if (registerOffset >= 0x10 && registerOffset <= 0x27)
+                {
+                    return FALSE;
+                }
+            }
+        }
+        // одобряем безопасную запись или любое чтение из порта данных 0xCFC
+        return TRUE;
+    }
+
+    // белый список стандартных VGA портов (0x3B0 - 0x3DF)
+    // Необходимы для работы программ мониторинга GPU
+    if (Port >= 0x3B0 && Port <= 0x3DF)
+    {
+        return TRUE;
+    }
+
+    return FALSE;
 }

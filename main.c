@@ -7,7 +7,7 @@ typedef struct _RTC_MEMORY_MAPPING RTC_MEMORY_MAPPING, *PRTC_MEMORY_MAPPING;
 
 extern NTSTATUS RtcMapMemoryViaSection(PRTC_SECTION_MAPPING MappingRequest, ULONG RequiredLength, ULONG RequiredAlignment);
 extern NTSTATUS RtcMapMemory(PRTC_MEMORY_MAPPING MappingRequest);
-extern BOOLEAN RtcValidatePciDataPortAccess(ULONG Port);
+extern BOOLEAN RtcValidateIOPortAccess(ULONG Port, BOOLEAN IsWrite);
 extern void RtcInitMappingTable(void);
 extern PVOID RtcGetMapping(PVOID Handle, ULONG* OutLength);
 extern BOOLEAN RtcRemoveMapping(PVOID Handle, ULONG Length);
@@ -37,7 +37,7 @@ VOID RtcUnload(_In_ PDRIVER_OBJECT DriverObject)
     }
 }
 
-// Функция для проверки безопасности MSR регистра
+// Функция для проверки безопасности MSR регистра (OpenRTCore64 feature)
 BOOLEAN RtcIsSafeMsr(ULONG MsrRegister)
 {
     // Белый список разрешенных регистров для мониторинга и разгона
@@ -129,49 +129,55 @@ NTSTATUS RtcDispatch(_In_ PDEVICE_OBJECT DeviceObject, _Inout_ PIRP Irp)
 
         case 0x80002008: // чтение из порта (BYTE)
             if (inputBufferLength == 8) {
-                buffer32[1] = READ_PORT_UCHAR((PUCHAR)(ULONG_PTR)buffer32[0]);
-                information = 8;
+                if (RtcValidateIOPortAccess(buffer32[0], FALSE)) {
+                    buffer32[1] = READ_PORT_UCHAR((PUCHAR)(ULONG_PTR)buffer32[0]);
+                    information = 8;
+                } else status = STATUS_ACCESS_DENIED;
             } else status = STATUS_INVALID_PARAMETER;
             break;
 
         case 0x8000200C: // чтение из порта (WORD)
             if (inputBufferLength == 8) {
-                buffer32[1] = READ_PORT_USHORT((PUSHORT)(ULONG_PTR)buffer32[0]);
-                information = 8;
+                if (RtcValidateIOPortAccess(buffer32[0], FALSE)) {
+                    buffer32[1] = READ_PORT_USHORT((PUSHORT)(ULONG_PTR)buffer32[0]);
+                    information = 8;
+                } else status = STATUS_ACCESS_DENIED;
             } else status = STATUS_INVALID_PARAMETER;
             break;
 
         case 0x80002010: // чтение из порта (DWORD)
             if (inputBufferLength == 8) {
-                buffer32[1] = READ_PORT_ULONG((PULONG)(ULONG_PTR)buffer32[0]);
-                information = 8;
+                if (RtcValidateIOPortAccess(buffer32[0], FALSE)) {
+                    buffer32[1] = READ_PORT_ULONG((PULONG)(ULONG_PTR)buffer32[0]);
+                    information = 8;
+                } else status = STATUS_ACCESS_DENIED;
             } else status = STATUS_INVALID_PARAMETER;
             break;
 
-        case 0x80002014: // запись в порт (BYTE) с валидацией PCI
+        case 0x80002014: // запись в порт (BYTE)
             if (inputBufferLength == 8) {
-                if (RtcValidatePciDataPortAccess(buffer32[0])) {
+                if (RtcValidateIOPortAccess(buffer32[0], TRUE)) {
                     WRITE_PORT_UCHAR((PUCHAR)(ULONG_PTR)buffer32[0], (UCHAR)buffer32[1]);
                     information = 8;
-                } else status = STATUS_INVALID_PARAMETER;
+                } else status = STATUS_ACCESS_DENIED;
             } else status = STATUS_INVALID_PARAMETER;
             break;
 
-        case 0x80002018: // запись в порт (WORD) с валидацией PCI
+        case 0x80002018: // запись в порт (WORD)
             if (inputBufferLength == 8) {
-                if (RtcValidatePciDataPortAccess(buffer32[0])) {
+                if (RtcValidateIOPortAccess(buffer32[0], TRUE)) {
                     WRITE_PORT_USHORT((PUSHORT)(ULONG_PTR)buffer32[0], (USHORT)buffer32[1]);
                     information = 8;
-                } else status = STATUS_INVALID_PARAMETER;
+                } else status = STATUS_ACCESS_DENIED;
             } else status = STATUS_INVALID_PARAMETER;
             break;
 
-        case 0x8000201C: // запись в порт (DWORD) с валидацией PCI
+        case 0x8000201C: // запись в порт (DWORD)
             if (inputBufferLength == 8) {
-                if (RtcValidatePciDataPortAccess(buffer32[0])) {
+                if (RtcValidateIOPortAccess(buffer32[0], TRUE)) {
                     WRITE_PORT_ULONG((PULONG)(ULONG_PTR)buffer32[0], buffer32[1]);
                     information = 8;
-                } else status = STATUS_INVALID_PARAMETER;
+                } else status = STATUS_ACCESS_DENIED;
             } else status = STATUS_INVALID_PARAMETER;
             break;
 
