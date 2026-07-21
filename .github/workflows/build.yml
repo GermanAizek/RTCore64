@@ -1,0 +1,30 @@
+name: Build Windows Driver
+
+on:
+  push:
+    branches: [ "main", "master" ]
+  pull_request:
+    branches: [ "main", "master" ]
+
+jobs:
+  build:
+    runs-on: windows-2019
+
+    steps:
+    - name: Checkout repository
+      uses: actions/checkout@v4
+
+    - name: Setup MSBuild
+      uses: microsoft/setup-msbuild@v2
+
+    - name: Install Windows Driver Kit (WDK)
+      run: choco install windowsdriverkit10 -y
+
+    - name: Build RTCore64 Solution
+      run: msbuild RTCore64.sln /t:Rebuild /p:Configuration=Release /p:Platform=x64
+
+    - name: Upload Driver Artifact
+      uses: actions/upload-artifact@v4
+      with:
+        name: RTCore64-Release-x64
+        path: x64/Release/RTCore64.sys
