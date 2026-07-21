@@ -17,8 +17,25 @@ jobs:
     - name: Setup MSBuild
       uses: microsoft/setup-msbuild@v2
 
-    - name: Install Windows Driver Kit (WDK)
-      run: choco install windowsdriverkit10 -y
+    - name: Install latest Windows Driver Kit (WDK) and Visual Studio Extension
+      shell: powershell
+      run: |
+        Write-Host "Downloading latest WDK..."
+        Invoke-WebRequest -Uri "https://go.microsoft.com/fwlink/?linkid=2196230" -OutFile wdksetup.exe
+        
+        Write-Host "Installing WDK (This may take 1-2 minutes)..."
+        Start-Process -FilePath .\wdksetup.exe -ArgumentList "/q" -Wait
+        
+        Write-Host "Locating WDK.vsix..."
+        $vsixPath = (Get-ChildItem -Path "C:\Program Files (x86)\Windows Kits\10\Vsix" -Filter "WDK.vsix" -Recurse | Select-Object -First 1).FullName
+        
+        Write-Host "Locating VSIXInstaller..."
+        $vswhere = "${env:ProgramFiles(x86)}\Microsoft Visual Studio\Installer\vswhere.exe"
+        $vsPath = & $vswhere -latest -property installationPath
+        $vsixInstaller = Join-Path $vsPath "Common7\IDE\VSIXInstaller.exe"
+        
+        Write-Host "Installing VSIX Extension for MSBuild integration..."
+        Start-Process -FilePath $vsixInstaller -ArgumentList "/q", "/admin", $vsixPath -Wait
 
     - name: Build RTCore64 Solution
       run: msbuild RTCore64.sln /t:Rebuild /p:Configuration=Release /p:Platform=x64
