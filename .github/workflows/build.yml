@@ -8,7 +8,7 @@ on:
 
 jobs:
   build:
-    runs-on: windows-2019
+    runs-on: windows-latest
 
     steps:
     - name: Checkout repository
@@ -22,6 +22,13 @@ jobs:
 
     - name: Build RTCore64 Solution
       run: msbuild RTCore64.sln /t:Rebuild /p:Configuration=Release /p:Platform=x64
+
+    - name: Create Test Certificate and Sign Driver
+      run: |
+        New-SelfSignedCertificate -DnsName "RTCore64 Test Cert" -CertStoreLocation "cert:\CurrentUser\My" -Type CodeSigningCert -Subject "RTCore64"
+        $cert = Get-ChildItem -Path "Cert:\CurrentUser\My" | Where-Object { $_.Subject -match "RTCore64" }
+        signtool sign /v /fd SHA256 /a /sha1 $($cert.Thumbprint) x64\Release\RTCore64.sys
+      shell: powershell
 
     - name: Upload Driver Artifact
       uses: actions/upload-artifact@v4
